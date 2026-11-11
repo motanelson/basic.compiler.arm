@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BASIC to ARM64 Linux Compiler IDE</title>
+<style>
+  :root {
+    --bg-main: #ffffff;
+    --bg-doc: #ffffff;
+    --border-color: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-muted: #64748b;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --panel-header: #f8fafc;
+    --font-code: "JetBrains Mono", "Fira Code", "Consolas", Menlo, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .badge {
+    background: #eff6ff;
+    color: var(--accent);
+    border: 1px solid #bfdbfe;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  select, button {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  select {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  button {
+    border: none;
+    font-weight: 600;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #ffffff;
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+  .btn-secondary:hover {
+    background: #f1f5f9;
+  }
+
+  .main-workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    background: var(--bg-main);
+  }
+
+  .editor-container, .output-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-doc);
+  }
+
+  .editor-container {
+    border-right: 1px solid var(--border-color);
+  }
+
+  .panel-header {
+    background: var(--panel-header);
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .editor-area {
+    flex: 1;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+  }
+
+  .line-numbers {
+    width: 48px;
+    padding: 14px 0;
+    background: #ffffff;
+    border-right: 1px solid #f1f5f9;
+    color: #94a3b8;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    text-align: right;
+    user-select: none;
+    overflow: hidden;
+  }
+  .line-numbers div {
+    padding-right: 12px;
+  }
+
+  textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 14px 16px;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #1e293b;
+    background: #ffffff;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+  }
+
+  #asmOutput {
+    background: #ffffff;
+    color: #0f172a;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    padding: 14px 16px;
+    overflow: auto;
+    flex: 1;
+    border: none;
+    outline: none;
+  }
+
+  .status-bar {
+    border-top: 1px solid var(--border-color);
+    padding: 6px 16px;
+    font-size: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    background: #ffffff;
+    color: var(--text-muted);
+  }
+
+  .status-tag {
+    font-weight: 600;
+  }
+  .status-tag.ok { color: var(--success); }
+  .status-tag.err { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>BASIC &rarr; ARM64</h1>
+    <span class="badge">Linux Syscalls AArch64</span>
+  </div>
+  <div class="actions">
+    <select id="sampleSelect" title="Load sample program">
+      <option value="primes">Sample: Prime Numbers Finder</option>
+      <option value="fibonacci">Sample: Fibonacci Series</option>
+      <option value="collatz">Sample: Collatz Conjecture (3N + 1)</option>
+      <option value="factorials">Sample: Factorials (Subroutines)</option>
+    </select>
+    <button class="btn-primary" id="btnCompile">Compile to ARM64</button>
+    <button class="btn-secondary" id="btnCopy">Copy ASM</button>
+    <button class="btn-secondary" id="btnDownload">Download .s</button>
+  </div>
+</header>
+
+<div class="main-workspace">
+  <!-- Input BASIC Section -->
+  <div class="editor-container">
+    <div class="panel-header">
+      <span>BASIC SOURCE (Labels only, no line numbers)</span>
+      <span id="srcStats">0 lines</span>
+    </div>
+    <div class="editor-area">
+      <div class="line-numbers" id="lineNums"></div>
+      <textarea id="basicInput" spellcheck="false" placeholder="Write BASIC code here..."></textarea>
+    </div>
+  </div>
+
+  <!-- Output ARM64 Assembly Section -->
+  <div class="output-container">
+    <div class="panel-header">
+      <span>GENERATED ARM64 LINUX ASSEMBLY (GNU AS / AArch64)</span>
+      <span id="asmStats">0 instructions</span>
+    </div>
+    <textarea id="asmOutput" readonly spellcheck="false" placeholder="Assembly will appear here..."></textarea>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div id="statusMessage"><span class="status-tag ok">Ready</span> &mdash; Standalone Lexer, Parser &amp; CodeGen</div>
+  <div>Syscalls: <code>sys_write (64)</code>, <code>sys_read (63)</code>, <code>sys_exit (93)</code></div>
+</div>
+
+<script>
+// --- SAMPLE PROGRAMS (Strict subset: No RND, no Graphics, no Trig, no Dates, no line numbers) ---
+const SAMPLES = {
+  primes: `' =====================================
+' Prime Numbers Checker
+' Uses labels and loops (No line numbers)
+' =====================================
+PRINT "=== Prime Numbers up to 50 ==="
+LET count = 0
+LET n = 2
+
+check_candidate:
+    IF n > 50 THEN GOTO all_done
+    LET is_prime = 1
+    LET d = 2
+
+check_div:
+    LET limit = d * d
+    IF limit > n THEN GOTO eval_prime
+    LET rem = n % d
+    IF rem = 0 THEN GOTO not_prime
+    LET d = d + 1
+    GOTO check_div
+
+not_prime:
+    LET is_prime = 0
+
+eval_prime:
+    IF is_prime = 1 THEN GOSUB print_prime
+    LET n = n + 1
+    GOTO check_candidate
+
+print_prime:
+    PRINT n; " is prime"
+    LET count = count + 1
+    RETURN
+
+all_done:
+    PRINT "Total primes found: "; count
+    END
+`,
+  fibonacci: `' =====================================
+' Fibonacci Sequence Generator
+' =====================================
+PRINT "--- First 15 Fibonacci Numbers ---"
+LET a = 0
+LET b = 1
+LET i = 0
+
+PRINT a
+PRINT b
+
+fib_loop:
+    LET c = a + b
+    PRINT c
+    LET a = b
+    LET b = c
+    LET i = i + 1
+    IF i < 13 THEN GOTO fib_loop
+
+PRINT "Done."
+END
+`,
+  collatz: `' =====================================
+' Collatz (3N + 1) Conjecture
+' =====================================
+PRINT "Collatz Sequence for N = 27:"
+LET n = 27
+LET steps = 0
+
+collatz_loop:
+    PRINT n; " -> ";
+    IF n = 1 THEN GOTO collatz_end
+    LET steps = steps + 1
+    LET rem = n % 2
+    IF rem = 0 THEN GOTO is_even
+    LET n = (3 * n) + 1
+    GOTO collatz_loop
+
+is_even:
+    LET n = n / 2
+    GOTO collatz_loop
+
+collatz_end:
+    PRINT 1
+    PRINT "Reached 1 in "; steps; " steps!"
+    END
+`,
+  factorials: `' =====================================
+' Factorial calculation using GOSUB
+' =====================================
+FOR num = 1 TO 10
+    LET n = num
+    GOSUB calc_factorial
+    PRINT "Factorial of "; num; " = "; fact
+NEXT num
+END
+
+calc_factorial:
+    LET fact = 1
+    LET curr = 1
+fact_loop:
+    IF curr > n THEN RETURN
+    LET fact = fact * curr
+    LET curr = curr + 1
+    GOTO fact_loop
+`
+};
+
+// --- COMPILER IMPLEMENTATION ---
+
+class BasicCompiler {
+  constructor(source) {
+    this.source = source;
+    this.variables = new Set();
+    this.stringTable = new Map();
+    this.strCount = 0;
+    this.labelCount = 0;
+  }
+
+  getStringLabel(str) {
+    if (this.stringTable.has(str)) {
+      return this.stringTable.get(str);
+    }
+    const label = `.L_str_${this.strCount++}`;
+    this.stringTable.set(str, label);
+    return label;
+  }
+
+  getUniqueLabel(prefix = "L_") {
+    return `.${prefix}_${this.labelCount++}`;
+  }
+
+  compile() {
+    const rawLines = this.source.split(/\r?\n/);
+    const instructions = [];
+
+    // First scan: discover variables, labels, and validate rules
+    for (let lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
+      let line = rawLines[lineIndex].trim();
+      if (!line || line.startsWith("'") || line.toUpperCase().startsWith("REM")) continue;
+
+      // Check forbidden patterns
+      if (/^\d+\s+/.test(line)) {
+        throw new Error(`Line ${lineIndex + 1}: Line numbers are prohibited. Use labels (e.g., 'start:') instead.`);
+      }
+      if (/\b(RND|RANDOMIZE|SIN|COS|TAN|ASIN|ACOS|ATAN|DATE|TIME|NOW|CIRCLE|LINE|PSET|DRAW)\b/i.test(line)) {
+        throw new Error(`Line ${lineIndex + 1}: Prohibited function used (No Trig, Graphics, RND, or Date/Time functions allowed).`);
+      }
+    }
+
+    // Code Generation
+    instructions.push("// ==========================================================");
+    instructions.push("// Generated by BASIC to ARM64 Linux Compiler");
+    instructions.push("// Target: AArch64 Linux (Syscalls: write=64, read=63, exit=93)");
+    instructions.push("// ==========================================================");
+    instructions.push("    .arch armv8-a");
+    instructions.push("    .text");
+    instructions.push("    .align 4");
+    instructions.push("    .global _start");
+    instructions.push("");
+    instructions.push("_start:");
+    instructions.push("    // Setup initial stack frame");
+    instructions.push("    stp     x29, x30, [sp, -16]!");
+    instructions.push("    mov     x29, sp");
+    instructions.push("");
+
+    // Parse statements line by line
+    for (let i = 0; i < rawLines.length; i++) {
+      let line = rawLines[i].trim();
+      if (!line || line.startsWith("'") || line.toUpperCase().startsWith("REM")) continue;
+
+      // Check if line is a label definition
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*:$/.test(line)) {
+        const lbl = line.slice(0, -1);
+        instructions.push(`\n${lbl}:`);
+        continue;
+      }
+
+      // Check for inline colon statement or label followed by statement
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*:\s*.+$/.test(line)) {
+        const colIdx = line.indexOf(':');
+        const lbl = line.slice(0, colIdx).trim();
+        instructions.push(`\n${lbl}:`);
+        line = line.slice(colIdx + 1).trim();
+      }
+
+      this.compileStatement(line, instructions, i + 1);
+    }
+
+    // Default exit in case no explicit END was reached
+    instructions.push("\n.L_default_exit:");
+    instructions.push("    mov     x0, #0              // exit code 0");
+    instructions.push("    mov     x8, #93             // sys_exit");
+    instructions.push("    svc     #0");
+
+    // Runtime support functions
+    this.appendRuntime(instructions);
+
+    // Data section
+    instructions.push("\n    .section .rodata");
+    instructions.push("    .align 4");
+    instructions.push(".L_newline:");
+    instructions.push('    .ascii "\\n"');
+    for (const [str, lbl] of this.stringTable.entries()) {
+      const sanitized = str.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const len = new TextEncoder().encode(str).length;
+      instructions.push(`${lbl}:`);
+      instructions.push(`    .ascii "${sanitized}"`);
+      instructions.push(`${lbl}_len = ${len}`);
+    }
+
+    // BSS section (variables)
+    instructions.push("\n    .section .bss");
+    instructions.push("    .align 8");
+    for (const varName of this.variables) {
+      instructions.push(`var_${varName}:`);
+      instructions.push("    .quad 0");
+    }
+    // Buffer for reading integers
+    instructions.push("input_buf:");
+    instructions.push("    .skip 64");
+
+    return instructions.join("\n");
+  }
+
+  compileStatement(line, asm, lineNum) {
+    const uc = line.toUpperCase();
+
+    // END / STOP
+    if (uc === "END" || uc === "STOP") {
+      asm.push("    mov     x0, #0");
+      asm.push("    mov     x8, #93             // sys_exit");
+      asm.push("    svc     #0");
+      return;
+    }
+
+    // GOTO label
+    if (uc.startsWith("GOTO ")) {
+      const target = line.slice(5).trim();
+      asm.push(`    b       ${target}`);
+      return;
+    }
+
+    // GOSUB label
+    if (uc.startsWith("GOSUB ")) {
+      const target = line.slice(6).trim();
+      asm.push(`    bl      ${target}`);
+      return;
+    }
+
+    // RETURN
+    if (uc === "RETURN") {
+      asm.push("    ret");
+      return;
+    }
+
+    // INPUT
+    if (uc.startsWith("INPUT ")) {
+      this.compileInput(line.slice(6).trim(), asm);
+      return;
+    }
+
+    // PRINT
+    if (uc.startsWith("PRINT") && (uc.length === 5 || /\s/.test(line[5]))) {
+      const args = line.slice(5).trim();
+      this.compilePrint(args, asm);
+      return;
+    }
+
+    // IF ... THEN ... [ELSE ...]
+    if (uc.startsWith("IF ")) {
+      this.compileIf(line.slice(3).trim(), asm, lineNum);
+      return;
+    }
+
+    // FOR var = start TO end [STEP step]
+    if (uc.startsWith("FOR ")) {
+      this.compileFor(line.slice(4).trim(), asm);
+      return;
+    }
+
+    // NEXT var
+    if (uc.startsWith("NEXT ") || uc === "NEXT") {
+      this.compileNext(line.slice(4).trim(), asm);
+      return;
+    }
+
+    // LET var = expr OR var = expr
+    let assignCode = line;
+    if (uc.startsWith("LET ")) {
+      assignCode = line.slice(4).trim();
+    }
+    if (assignCode.includes("=")) {
+      this.compileAssign(assignCode, asm);
+      return;
+    }
+
+    throw new Error(`Line ${lineNum}: Unrecognized BASIC statement: "${line}"`);
+  }
+
+  compilePrint(argsStr, asm) {
+    if (!argsStr) {
+      asm.push("    bl      _builtin_print_newline");
+      return;
+    }
+
+    const items = this.splitPrintArgs(argsStr);
+    let endsWithSeparator = false;
+
+    for (const item of items) {
+      if (item === ";" || item === ",") {
+        endsWithSeparator = true;
+        continue;
+      }
+      endsWithSeparator = false;
+
+      if (item.startsWith('"') && item.endsWith('"')) {
+        const text = item.slice(1, -1);
+        const lbl = this.getStringLabel(text);
+        asm.push(`    adrp    x0, ${lbl}`);
+        asm.push(`    add     x0, x0, :lo12:${lbl}`);
+        asm.push(`    mov     x1, #${lbl}_len`);
+        asm.push("    bl      _builtin_print_string");
+      } else {
+        // Integer expression
+        this.compileExpression(item, asm); // result in x0
+        asm.push("    bl      _builtin_print_int");
+      }
+    }
+
+    if (!endsWithSeparator) {
+      asm.push("    bl      _builtin_print_newline");
+    }
+  }
+
+  compileInput(arg, asm) {
+    let prompt = "";
+    let varName = arg;
+
+    if (arg.includes(";")) {
+      const parts = arg.split(";");
+      prompt = parts[0].trim();
+      varName = parts[1].trim();
+      if (prompt.startsWith('"') && prompt.endsWith('"')) {
+        prompt = prompt.slice(1, -1);
+      }
+      const pLbl = this.getStringLabel(prompt);
+      asm.push(`    adrp    x0, ${pLbl}`);
+      asm.push(`    add     x0, x0, :lo12:${pLbl}`);
+      asm.push(`    mov     x1, #${pLbl}_len`);
+      asm.push("    bl      _builtin_print_string");
+    }
+
+    this.variables.add(varName);
+    asm.push("    bl      _builtin_read_int");
+    asm.push(`    adrp    x1, var_${varName}`);
+    asm.push(`    str     x0, [x1, :lo12:var_${varName}]`);
+  }
+
+  splitPrintArgs(str) {
+    const res = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+        current += ch;
+      } else if (!inQuotes && (ch === ';' || ch === ',')) {
+        if (current.trim()) res.push(current.trim());
+        res.push(ch);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) res.push(current.trim());
+    return res;
+  }
+
+  compileAssign(expr, asm) {
+    const eq = expr.indexOf("=");
+    const varName = expr.slice(0, eq).trim();
+    const right = expr.slice(eq + 1).trim();
+
+    this.variables.add(varName);
+    this.compileExpression(right, asm); // result in x0
+
+    asm.push(`    adrp    x1, var_${varName}`);
+    asm.push(`    str     x0, [x1, :lo12:var_${varName}]`);
+  }
+
+  compileIf(clause, asm, lineNum) {
+    // IF <cond> THEN <statement|GOTO label> [ELSE <statement>]
+    const thenIdx = clause.toUpperCase().indexOf(" THEN ");
+    if (thenIdx === -1) {
+      throw new Error(`Line ${lineNum}: IF missing THEN keyword.`);
+    }
+
+    const condStr = clause.slice(0, thenIdx).trim();
+    let remainder = clause.slice(thenIdx + 6).trim();
+
+    let thenPart = remainder;
+    let elsePart = null;
+
+    const elseIdx = remainder.toUpperCase().indexOf(" ELSE ");
+    if (elseIdx !== -1) {
+      thenPart = remainder.slice(0, elseIdx).trim();
+      elsePart = remainder.slice(elseIdx + 6).trim();
+    }
+
+    // Evaluate Condition
+    const relops = ["<=", ">=", "<>", "=", "<", ">"];
+    let opFound = null;
+    let lhs = "", rhs = "";
+
+    for (const op of relops) {
+      const idx = condStr.indexOf(op);
+      if (idx !== -1) {
+        opFound = op;
+        lhs = condStr.slice(0, idx).trim();
+        rhs = condStr.slice(idx + op.length).trim();
+        break;
+      }
+    }
+
+    if (!opFound) {
+      throw new Error(`Line ${lineNum}: Invalid IF condition: ${condStr}`);
+    }
+
+    // Evaluate LHS into x0, push to stack
+    this.compileExpression(lhs, asm);
+    asm.push("    str     x0, [sp, -16]!       // save LHS");
+    // Evaluate RHS into x0
+    this.compileExpression(rhs, asm);
+    asm.push("    ldr     x1, [sp], 16         // restore LHS to x1");
+    asm.push("    cmp     x1, x0              // compare LHS with RHS");
+
+    const lblElse = this.getUniqueLabel("if_else");
+    const lblEnd = this.getUniqueLabel("if_end");
+
+    // Invert condition to branch away
+    const branchAway = {
+      "=":  "bne",
+      "<>": "beq",
+      "<":  "bge",
+      ">":  "ble",
+      "<=": "bgt",
+      ">=": "blt"
+    }[opFound];
+
+    asm.push(`    ${branchAway}     ${elsePart ? lblElse : lblEnd}`);
+
+    // Compile THEN branch
+    if (thenPart.toUpperCase().startsWith("GOTO ")) {
+      asm.push(`    b       ${thenPart.slice(5).trim()}`);
+    } else {
+      this.compileStatement(thenPart, asm, lineNum);
+    }
+
+    if (elsePart) {
+      asm.push(`    b       ${lblEnd}`);
+      asm.push(`${lblElse}:`);
+      if (elsePart.toUpperCase().startsWith("GOTO ")) {
+        asm.push(`    b       ${elsePart.slice(5).trim()}`);
+      } else {
+        this.compileStatement(elsePart, asm, lineNum);
+      }
+    }
+
+    if (!elsePart) {
+      asm.push(`${lblEnd}:`);
+    } else {
+      asm.push(`${lblEnd}:`);
+    }
+  }
+
+  compileFor(clause, asm) {
+    // FOR I = 1 TO 10 [STEP 1]
+    const match = clause.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+?)\s+TO\s+(.+?)(\s+STEP\s+(.+))?$/i);
+    if (!match) throw new Error("Malformed FOR statement");
+
+    const varName = match[1];
+    const startExpr = match[2];
+    const endExpr = match[3];
+    const stepExpr = match[5] ? match[5] : "1";
+
+    this.variables.add(varName);
+
+    // Initial assignment
+    this.compileExpression(startExpr, asm);
+    asm.push(`    adrp    x1, var_${varName}`);
+    asm.push(`    str     x0, [x1, :lo12:var_${varName}]`);
+
+    if (!this.forStack) this.forStack = [];
+    const forLabel = this.getUniqueLabel("for_loop");
+    const endLabel = this.getUniqueLabel("for_end");
+
+    this.forStack.push({ varName, endExpr, stepExpr, forLabel, endLabel });
+    asm.push(`${forLabel}:`);
+  }
+
+  compileNext(varName, asm) {
+    if (!this.forStack || this.forStack.length === 0) {
+      throw new Error("NEXT without FOR");
+    }
+    const ctx = this.forStack.pop();
+    if (varName && varName !== ctx.varName) {
+      throw new Error(`Mismatched NEXT variable: expected ${ctx.varName}, got ${varName}`);
+    }
+
+    // Increment: var = var + step
+    asm.push(`    adrp    x1, var_${ctx.varName}`);
+    asm.push(`    ldr     x0, [x1, :lo12:var_${ctx.varName}]`);
+    asm.push("    str     x0, [sp, -16]!");
+    this.compileExpression(ctx.stepExpr, asm);
+    asm.push("    ldr     x1, [sp], 16");
+    asm.push("    add     x0, x1, x0");
+    asm.push(`    adrp    x1, var_${ctx.varName}`);
+    asm.push(`    str     x0, [x1, :lo12:var_${ctx.varName}]`);
+
+    // Check bounds: compare with endExpr
+    asm.push("    str     x0, [sp, -16]!");
+    this.compileExpression(ctx.endExpr, asm);
+    asm.push("    ldr     x1, [sp], 16");
+    asm.push("    cmp     x1, x0");
+    asm.push(`    ble     ${ctx.forLabel}`);
+    asm.push(`${ctx.endLabel}:`);
+  }
+
+  // Recursive Descent Expression Parser for 64-bit integer math (+, -, *, /, %)
+  compileExpression(exprStr, asm) {
+    const tokens = this.tokenizeExpr(exprStr);
+    let pos = 0;
+
+    const parsePrimary = () => {
+      const tok = tokens[pos++];
+      if (!tok) throw new Error("Unexpected end of expression");
+
+      if (tok.type === "NUM") {
+        asm.push(`    ldr     x0, =${tok.value}`);
+        return;
+      }
+      if (tok.type === "VAR") {
+        this.variables.add(tok.value);
+        asm.push(`    adrp    x1, var_${tok.value}`);
+        asm.push(`    ldr     x0, [x1, :lo12:var_${tok.value}]`);
+        return;
+      }
+      if (tok.type === "OP" && tok.value === "-") {
+        parsePrimary();
+        asm.push("    neg     x0, x0");
+        return;
+      }
+      if (tok.type === "LPAREN") {
+        parseAddSub();
+        if (!tokens[pos] || tokens[pos].type !== "RPAREN") {
+          throw new Error("Missing closing parenthesis in expression");
+        }
+        pos++;
+        return;
+      }
+      throw new Error(`Unexpected token in expression: ${tok.value}`);
+    };
+
+    const parseMulDiv = () => {
+      parsePrimary();
+      while (pos < tokens.length && tokens[pos].type === "OP" && ["*", "/", "%"].includes(tokens[pos].value)) {
+        const op = tokens[pos++].value;
+        asm.push("    str     x0, [sp, -16]!       // push LHS");
+        parsePrimary();
+        asm.push("    ldr     x1, [sp], 16         // pop LHS -> x1");
+        if (op === "*") {
+          asm.push("    mul     x0, x1, x0");
+        } else if (op === "/") {
+          asm.push("    sdiv    x0, x1, x0");
+        } else if (op === "%") {
+          asm.push("    sdiv    x2, x1, x0");
+          asm.push("    msub    x0, x2, x0, x1      // modulo: remainder = x1 - (x2 * x0)");
+        }
+      }
+    };
+
+    const parseAddSub = () => {
+      parseMulDiv();
+      while (pos < tokens.length && tokens[pos].type === "OP" && ["+", "-"].includes(tokens[pos].value)) {
+        const op = tokens[pos++].value;
+        asm.push("    str     x0, [sp, -16]!       // push LHS");
+        parseMulDiv();
+        asm.push("    ldr     x1, [sp], 16         // pop LHS -> x1");
+        if (op === "+") {
+          asm.push("    add     x0, x1, x0");
+        } else if (op === "-") {
+          asm.push("    sub     x0, x1, x0");
+        }
+      }
+    };
+
+    parseAddSub();
+  }
+
+  tokenizeExpr(str) {
+    const tokens = [];
+    let i = 0;
+    while (i < str.length) {
+      const ch = str[i];
+      if (/\s/.test(ch)) { i++; continue; }
+      if (/[0-9]/.test(ch)) {
+        let num = "";
+        while (i < str.length && /[0-9]/.test(str[i])) num += str[i++];
+        tokens.push({ type: "NUM", value: num });
+        continue;
+      }
+      if (/[a-zA-Z_]/.test(ch)) {
+        let id = "";
+        while (i < str.length && /[a-zA-Z0-9_]/.test(str[i])) id += str[i++];
+        tokens.push({ type: "VAR", value: id });
+        continue;
+      }
+      if (ch === '(') { tokens.push({ type: "LPAREN" }); i++; continue; }
+      if (ch === ')') { tokens.push({ type: "RPAREN" }); i++; continue; }
+      if ("+-*/%".includes(ch)) {
+        tokens.push({ type: "OP", value: ch });
+        i++;
+        continue;
+      }
+      throw new Error(`Invalid token in expression: '${ch}'`);
+    }
+    return tokens;
+  }
+
+  appendRuntime(asm) {
+    asm.push(`
+// ==========================================================
+// Built-in ARM64 Linux Syscall Runtime
+// ==========================================================
+_builtin_print_newline:
+    stp     x29, x30, [sp, -16]!
+    mov     x0, #1              // stdout
+    adrp    x1, .L_newline
+    add     x1, x1, :lo12:.L_newline
+    mov     x2, #1              // len = 1
+    mov     x8, #64             // sys_write
+    svc     #0
+    ldp     x29, x30, [sp], 16
+    ret
+
+_builtin_print_string:
+    // x0: address, x1: length
+    stp     x29, x30, [sp, -16]!
+    mov     x2, x1              // count
+    mov     x1, x0              // buf
+    mov     x0, #1              // fd 1 (stdout)
+    mov     x8, #64             // sys_write
+    svc     #0
+    ldp     x29, x30, [sp], 16
+    ret
+
+_builtin_print_int:
+    // Prints signed 64-bit int in x0 to stdout
+    stp     x29, x30, [sp, -48]!
+    mov     x29, sp
+    mov     x9, x0              // copy number
+    add     x1, sp, #40         // ptr at end of buffer
+    mov     w2, #0              // len = 0
+    mov     x10, #10
+
+    cmp     x9, #0
+    bne     1f
+    // Zero special case
+    sub     x1, x1, #1
+    mov     w3, #'0'
+    strb    w3, [x1]
+    mov     x2, #1
+    b       4f
+
+1:
+    mov     x11, #0             // is_neg flag
+    cmp     x9, #0
+    bge     2f
+    mov     x11, #1
+    neg     x9, x9
+
+2:  // Conversion loop
+    cbz     x9, 3f
+    udiv    x12, x9, x10
+    msub    x13, x12, x10, x9   // remainder
+    add     w13, w13, #'0'
+    sub     x1, x1, #1
+    strb    w13, [x1]
+    add     x2, x2, #1
+    mov     x9, x12
+    b       2b
+
+3:
+    cbz     x11, 4f
+    sub     x1, x1, #1
+    mov     w3, #'-'
+    strb    w3, [x1]
+    add     x2, x2, #1
+
+4:
+    mov     x0, #1              // stdout
+    mov     x8, #64             // sys_write
+    svc     #0
+    ldp     x29, x30, [sp], 48
+    ret
+
+_builtin_read_int:
+    // Reads integer from stdin into x0 using sys_read
+    stp     x29, x30, [sp, -32]!
+    mov     x29, sp
+    mov     x0, #0              // stdin
+    adrp    x1, input_buf
+    add     x1, x1, :lo12:input_buf
+    mov     x2, #32             // read up to 32 bytes
+    mov     x8, #63             // sys_read
+    svc     #0
+
+    // Parse decimal from input_buf
+    adrp    x1, input_buf
+    add     x1, x1, :lo12:input_buf
+    mov     x0, #0              // result
+    mov     x2, #0              // sign
+    ldrsb   w3, [x1]
+    cmp     w3, #'-'
+    bne     .L_parse_loop
+    mov     x2, #1
+    add     x1, x1, #1
+
+.L_parse_loop:
+    ldrb    w3, [x1], #1
+    cmp     w3, #'0'
+    blt     .L_parse_end
+    cmp     w3, #'9'
+    bgt     .L_parse_end
+    sub     w3, w3, #'0'
+    mov     x4, #10
+    mul     x0, x0, x4
+    add     x0, x0, x3
+    b       .L_parse_loop
+
+.L_parse_end:
+    cbz     x2, .L_done_read
+    neg     x0, x0
+.L_done_read:
+    ldp     x29, x30, [sp], 32
+    ret
+`);
+  }
+}
+
+// --- UI INTERACTIONS & EVENT LISTENERS ---
+
+const basicInput = document.getElementById("basicInput");
+const asmOutput = document.getElementById("asmOutput");
+const lineNums = document.getElementById("lineNums");
+const statusMessage = document.getElementById("statusMessage");
+const srcStats = document.getElementById("srcStats");
+const asmStats = document.getElementById("asmStats");
+const sampleSelect = document.getElementById("sampleSelect");
+const btnCompile = document.getElementById("btnCompile");
+const btnCopy = document.getElementById("btnCopy");
+const btnDownload = document.getElementById("btnDownload");
+
+function updateLineNumbers() {
+  const lines = basicInput.value.split("\n");
+  srcStats.textContent = `${lines.length} lines`;
+  let html = "";
+  for (let i = 1; i <= lines.length; i++) {
+    html += `<div>${i}</div>`;
+  }
+  lineNums.innerHTML = html;
+}
+
+function doCompile() {
+  try {
+    const compiler = new BasicCompiler(basicInput.value);
+    const resultAsm = compiler.compile();
+    asmOutput.value = resultAsm;
+    const asmLineCount = resultAsm.split("\n").length;
+    asmStats.textContent = `${asmLineCount} lines ASM`;
+    statusMessage.innerHTML = `<span class="status-tag ok">Success</span> &mdash; Compiled cleanly to ARM64 (AArch64)`;
+  } catch (err) {
+    asmOutput.value = `// Compilation Failed:\n// ${err.message}`;
+    statusMessage.innerHTML = `<span class="status-tag err">Error</span> &mdash; ${err.message}`;
+  }
+}
+
+// Event Bindings
+basicInput.addEventListener("input", () => {
+  updateLineNumbers();
+});
+
+basicInput.addEventListener("scroll", () => {
+  lineNums.scrollTop = basicInput.scrollTop;
+});
+
+sampleSelect.addEventListener("change", (e) => {
+  const sel = e.target.value;
+  if (SAMPLES[sel]) {
+    basicInput.value = SAMPLES[sel];
+    updateLineNumbers();
+    doCompile();
+  }
+});
+
+btnCompile.addEventListener("click", doCompile);
+
+btnCopy.addEventListener("click", () => {
+  if (!asmOutput.value) return;
+  navigator.clipboard.writeText(asmOutput.value).then(() => {
+    const orig = btnCopy.textContent;
+    btnCopy.textContent = "Copied!";
+    setTimeout(() => btnCopy.textContent = orig, 1500);
+  });
+});
+
+btnDownload.addEventListener("click", () => {
+  const blob = new Blob([asmOutput.value], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "program.s";
+  a.click();
+});
+
+// Tab indentation support in textarea
+basicInput.addEventListener("keydown", function(e) {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+    this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+    this.selectionStart = this.selectionEnd = start + 4;
+  }
+});
+
+// Initial Setup
+basicInput.value = SAMPLES.primes;
+updateLineNumbers();
+doCompile();
+</script>
+</body>
+</html>
